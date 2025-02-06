@@ -7,8 +7,8 @@ import string
 
 from flask import Flask, render_template, request, redirect, url_for, send_file, jsonify
 import pymongo
-from bson.objectid import ObjectId
 import certifi
+from bson.objectid import ObjectId
 
 # For generating barcode images
 from barcode import Code128
@@ -17,7 +17,7 @@ from barcode.writer import ImageWriter
 # For Tashkent timezone
 import pytz
 
-# ---- Monkey-patch to fix FreeTypeFont.getsize error ----
+# ---- Monkey-patch to fix FreeTypeFont.getsize error for python-barcode ----
 import barcode.writer
 from PIL import ImageFont
 
@@ -36,19 +36,21 @@ app.config['SECRET_KEY'] = 'yoursecretkey'
 os.makedirs('static/barcodes', exist_ok=True)
 
 # Replace with your MongoDB Atlas connection string
-MONGO_URI = "mongodb+srv://nurmuhammadburiev:N9868183nurik@canteen-kassa.udxts.mongodb.net/?retryWrites=true&w=majority&appName=Canteen-kassa"
+MONGO_URI = (
+    "mongodb+srv://nurmuhammadburiev:N9868183nurik@canteen-kassa.udxts.mongodb.net"
+    "/?retryWrites=true&w=majority&appName=Canteen-kassa"
+)
 
-# Initialize collections with None in case connection fails
 users_collection = None
 meals_collection = None
 
 try:
-    # Use certifi to provide a valid certificate authority.
+    # Use certifi's CA file to ensure proper TLS validation
     client = pymongo.MongoClient(
         MONGO_URI,
         tls=True,
         tlsCAFile=certifi.where(),
-        # Uncomment the following line if you need to bypass certificate validation (not recommended for production)
+        # Uncomment to disregard certificate validation (NOT recommended for production):
         # tlsAllowInvalidCertificates=True
     )
     db = client["canteen"]
@@ -57,7 +59,7 @@ try:
     print("Successfully connected to MongoDB Atlas.")
 except Exception as e:
     print("Error connecting to MongoDB Atlas:", e)
-    # Fallback to empty collections to avoid NameError later.
+    # Fallback so your route handlers won't crash:
     users_collection = {}
     meals_collection = {}
 
@@ -68,8 +70,7 @@ def generate_unique_code(length=8):
 
 def create_barcode(content, filepath):
     """
-    Generate a Code128 barcode (using ImageWriter) for the given content
-    and save it to filepath.
+    Generate a Code128 barcode for the given content.
     """
     code128 = Code128(content, writer=ImageWriter())
     code128.save(filepath)
@@ -94,19 +95,14 @@ def index():
 @app.route('/scan', methods=['POST'])
 def scan():
     """
-    AJAX endpoint for scanning a barcode.
-    Records the meal time in Tashkent time (plus 5 hours) if the user exists 
-    and hasn't been recorded for today.
+    AJAX endpoint for scanning a barcode to record a meal time (with Tashkent +5hrs).
     """
     barcode_val = request.form.get('barcode', '').strip()
 
-    # Find user by barcode value (stored under 'barcode')
+    # Find user by barcode value
     user = users_collection.find_one({"barcode": barcode_val})
     if not user:
-        return jsonify({
-            'status': 'error',
-            'message': 'Пользователь с таким штрихкодом не найден.'
-        })
+        return jsonify({'status': 'error', 'message': 'Пользователь не найден.'})
 
     tz = pytz.timezone("Asia/Tashkent")
     today_start = datetime.datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -138,13 +134,12 @@ def scan():
 @app.route('/lookup', methods=['POST'])
 def lookup():
     """
-    AJAX endpoint for looking up a user by barcode without altering meal records.
-    This is used in the barcodes page to verify barcode ownership.
+    AJAX endpoint to look up a user by barcode without altering meal records.
     """
     barcode_val = request.form.get('barcode', '').strip()
     user = users_collection.find_one({"barcode": barcode_val})
     if not user:
-         return jsonify({"status": "error", "message": "Пользователь с таким штрихкодом не найден."})
+        return jsonify({"status": "error", "message": "Пользователь не найден."})
     user['_id'] = str(user['_id'])
     return jsonify({
          "status": "success",
@@ -167,7 +162,7 @@ def report():
 @app.route('/download-report', methods=['POST'])
 def download_report():
     """
-    Generates a CSV report that contains user fields and the meal time when the meal was recorded.
+    Generates a CSV report with user fields and recorded meal timestamps.
     """
     start_date = request.form.get('start_date')
     end_date = request.form.get('end_date')
@@ -183,7 +178,10 @@ def download_report():
     end_dt = tz.localize(end_dt_naive.replace(hour=23, minute=59, second=59, microsecond=999999))
 
     query = {
-        "timestamp": {"$gte": start_dt, "$lte": end_dt}
+        "timestamp": {
+            "$gte": start_dt,
+            "$lte": end_dt
+        }
     }
     meals_cursor = meals_collection.find(query).sort("timestamp", 1)
 
@@ -203,8 +201,8 @@ def download_report():
         barcode_val = user_doc.get("barcode", "")
 
         meal_time = meal["timestamp"]
-        meal_time_tashkent = meal_time if meal_time.tzinfo else tz.localize(meal_time)
-        meal_time_adjusted = meal_time_tashkent + datetime.timedelta(hours=5)
+        meal_time_local = meal_time if meal_time.tzinfo else tz.localize(meal_time)
+        meal_time_adjusted = meal_time_local + datetime.timedelta(hours=5)
         meal_time_str = meal_time_adjusted.strftime("%Y-%m-%d %H:%M:%S")
 
         writer.writerow([uid_str, name, phone, barcode_val, meal_time_str])
@@ -220,9 +218,7 @@ def download_report():
 @app.route('/add_user', methods=['POST'])
 def add_user():
     """
-    Adds a new user.
-    Generates a unique barcode if not provided.
-    Creates a barcode image for the user.
+    Adds a new user with optional barcode generation.
     """
     name = request.form.get("name", "")
     phone = request.form.get("phone", "")
@@ -245,7 +241,7 @@ def add_user():
         "phone": phone,
         "photo_url": photo_url,
         "barcode": barcode_val,
-        "barcode_image": barcode_filepath + ".png"  # Barcode writer appends .png
+        "barcode_image": barcode_filepath + ".png"  # python-barcode appends '.png'
     }
     users_collection.insert_one(new_user)
     return redirect(url_for('index'))
@@ -253,7 +249,7 @@ def add_user():
 @app.route('/delete_user/<uid>')
 def delete_user(uid):
     """
-    Deletes a user and removes their barcode image file if it exists.
+    Deletes a user and their associated barcode image.
     """
     try:
         obj_id = ObjectId(uid)
@@ -269,7 +265,7 @@ def delete_user(uid):
 @app.route('/barcodes')
 def barcodes():
     """
-    Displays a page with a list of all barcodes along with the corresponding user details.
+    Displays all barcodes with corresponding user details.
     """
     try:
         users_cursor = users_collection.find()
@@ -285,8 +281,7 @@ def barcodes():
 @app.route('/meal_records')
 def meal_records():
     """
-    Displays a page with all meal records.
-    Each record shows the user details and meal timestamp.
+    Displays all meal records with user details and timestamps.
     """
     tz = pytz.timezone("Asia/Tashkent")
     meals = []
