@@ -4,6 +4,7 @@ import io
 import csv
 import random
 import string
+import ssl
 
 from flask import Flask, render_template, request, redirect, url_for, send_file, jsonify
 import pymongo
@@ -21,7 +22,6 @@ import barcode.writer
 from PIL import ImageFont
 
 def _getsize_patch(self, text, *args, **kwargs):
-    # Use getbbox to calculate width and height
     bbox = self.getbbox(text)
     width = bbox[2] - bbox[0]
     height = bbox[3] - bbox[1]
@@ -33,14 +33,19 @@ ImageFont.FreeTypeFont.getsize = _getsize_patch
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'yoursecretkey'
 
-# Create static folder for barcodes if not exist
 os.makedirs('static/barcodes', exist_ok=True)
 
 # Replace with your MongoDB Atlas connection string
 MONGO_URI = "mongodb+srv://nurmuhammadburiev:N9868183nurik@canteen-kassa.udxts.mongodb.net/?retryWrites=true&w=majority&appName=Canteen-kassa"
 
 try:
-    client = pymongo.MongoClient(MONGO_URI)
+    # For testing purposes only: disable TLS certificate verification
+    client = pymongo.MongoClient(
+        MONGO_URI,
+        tls=True,
+        tlsAllowInvalidCertificates=True,
+        ssl_cert_reqs=ssl.CERT_NONE
+    )
     db = client["canteen"]
     users_collection = db["users"]
     meals_collection = db["meals"]
@@ -49,31 +54,22 @@ except Exception as e:
     print("Error connecting to MongoDB Atlas:", e)
 
 def generate_unique_code(length=8):
-    """Generate a random alphanumeric string for the user's unique code."""
     chars = string.ascii_uppercase + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
 
 def create_barcode(content, filepath):
-    """
-    Generate a Code128 barcode (using ImageWriter) for the given content
-    and save it to filepath.
-    """
     code128 = Code128(content, writer=ImageWriter())
     code128.save(filepath)
 
 @app.route('/')
 def index():
-    """
-    Main page:
-    - Displays a form to add a user (auto-generates code if none provided).
-    - Shows a list of all users along with their barcode images.
-    """
     users_cursor = users_collection.find()
     users = []
     for user in users_cursor:
         user['_id'] = str(user['_id'])
         users.append(user)
     return render_template('index.html', users=users)
+    
 
 @app.route('/scan', methods=['POST'])
 def scan():
