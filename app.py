@@ -79,7 +79,7 @@ def index():
 def scan():
     """
     AJAX endpoint for scanning a barcode.
-    Records the meal time in Tashkent time (plus 5 hours) if the user exists
+    Records the meal time in Tashkent time (plus 5 hours) if the user exists 
     and hasn't been recorded for today. Since the check is based on today's date,
     the status resets at midnight.
     """
@@ -308,4 +308,5 @@ def delete_meal(meal_id):
     return redirect(url_for("meal_records"))
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5055)
+    port = int(os.environ.get('PORT', 5055))
+    app.run(debug=True, host='0.0.0.0', port=port)
