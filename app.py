@@ -38,13 +38,17 @@ os.makedirs('static/barcodes', exist_ok=True)
 # Replace with your MongoDB Atlas connection string
 MONGO_URI = "mongodb+srv://nurmuhammadburiev:N9868183nurik@canteen-kassa.udxts.mongodb.net/?retryWrites=true&w=majority&appName=Canteen-kassa"
 
+# Initialize collections with None in case connection fails
+users_collection = None
+meals_collection = None
+
 try:
-    # For testing purposes only: disable TLS certificate verification if needed
+    # For testing purposes only: disable TLS certificate verification if needed.
+    # NOTE: Remove tlsAllowInvalidCertificates for production environments.
     client = pymongo.MongoClient(
         MONGO_URI,
         tls=True,
-        tlsAllowInvalidCertificates=True,
-        ssl_cert_reqs=ssl.CERT_NONE
+        tlsAllowInvalidCertificates=True
     )
     db = client["canteen"]
     users_collection = db["users"]
@@ -52,6 +56,9 @@ try:
     print("Successfully connected to MongoDB Atlas.")
 except Exception as e:
     print("Error connecting to MongoDB Atlas:", e)
+    # Set collections to empty dict-like objects to avoid NameError later.
+    users_collection = {}
+    meals_collection = {}
 
 def generate_unique_code(length=8):
     """Generate a random alphanumeric string for the user's unique code."""
@@ -72,7 +79,11 @@ def index():
     Main page:
     - Displays a list of all users along with their barcode images.
     """
-    users_cursor = users_collection.find()
+    try:
+        users_cursor = users_collection.find()
+    except Exception as e:
+        print("Error retrieving users:", e)
+        users_cursor = []
     users = []
     for user in users_cursor:
         user['_id'] = str(user['_id'])
@@ -260,7 +271,11 @@ def barcodes():
     """
     Displays a page with a list of all barcodes along with the corresponding user details.
     """
-    users_cursor = users_collection.find()
+    try:
+        users_cursor = users_collection.find()
+    except Exception as e:
+        print("Error retrieving barcodes:", e)
+        users_cursor = []
     users = []
     for user in users_cursor:
         user['_id'] = str(user['_id'])
