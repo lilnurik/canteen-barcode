@@ -1,18 +1,18 @@
-# Используем официальный базовый образ Python
+# Use the official Python slim image as the base image
 FROM python:3.9-slim
 
-# Устанавливаем рабочую директорию
+# Set the working directory inside the container
 WORKDIR /app
 
-# Копируем файл с зависимостями и устанавливаем их
+# Copy the requirements.txt and install dependencies
 COPY requirements.txt requirements.txt
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Копируем всё содержимое проекта в контейнер
+# Copy the rest of the application code
 COPY . .
 
-# Открываем порт, который будет использовать Render (значение PORT задаётся переменной окружения)
+# Expose the port that Render will use. This can be adjusted if needed.
 EXPOSE 5055
 
-# Команда для запуска приложения с использованием gunicorn
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:$PORT"]
+# Start the application with gunicorn, using the PORT environment variable (defaulting to 5055 if not set)
+CMD ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:${PORT:-5055}"]
