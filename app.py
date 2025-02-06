@@ -39,7 +39,7 @@ os.makedirs('static/barcodes', exist_ok=True)
 MONGO_URI = "mongodb+srv://nurmuhammadburiev:N9868183nurik@canteen-kassa.udxts.mongodb.net/?retryWrites=true&w=majority&appName=Canteen-kassa"
 
 try:
-    # For testing purposes only: disable TLS certificate verification
+    # For testing purposes only: disable TLS certificate verification if needed
     client = pymongo.MongoClient(
         MONGO_URI,
         tls=True,
@@ -54,30 +54,37 @@ except Exception as e:
     print("Error connecting to MongoDB Atlas:", e)
 
 def generate_unique_code(length=8):
+    """Generate a random alphanumeric string for the user's unique code."""
     chars = string.ascii_uppercase + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
 
 def create_barcode(content, filepath):
+    """
+    Generate a Code128 barcode (using ImageWriter) for the given content
+    and save it to filepath.
+    """
     code128 = Code128(content, writer=ImageWriter())
     code128.save(filepath)
 
 @app.route('/')
 def index():
+    """
+    Main page:
+    - Displays a list of all users along with their barcode images.
+    """
     users_cursor = users_collection.find()
     users = []
     for user in users_cursor:
         user['_id'] = str(user['_id'])
         users.append(user)
     return render_template('index.html', users=users)
-    
 
 @app.route('/scan', methods=['POST'])
 def scan():
     """
     AJAX endpoint for scanning a barcode.
     Records the meal time in Tashkent time (plus 5 hours) if the user exists 
-    and hasn't been recorded for today. Since the check is based on today's date,
-    the status resets at midnight.
+    and hasn't been recorded for today.
     """
     barcode_val = request.form.get('barcode', '').strip()
 
@@ -148,8 +155,7 @@ def report():
 @app.route('/download-report', methods=['POST'])
 def download_report():
     """
-    Generates a CSV report that contains user fields (with phone number)
-    and the meal time (Asia/Tashkent time plus 5 hours) when the meal was recorded.
+    Generates a CSV report that contains user fields and the meal time when the meal was recorded.
     """
     start_date = request.form.get('start_date')
     end_date = request.form.get('end_date')
@@ -171,7 +177,6 @@ def download_report():
 
     output = io.StringIO()
     writer = csv.writer(output)
-
     writer.writerow(["User ID", "Name", "Phone", "Barcode", "Meal Time (Asia/Tashkent +5h)"])
 
     for meal in meals_cursor:
@@ -207,7 +212,6 @@ def add_user():
     Adds a new user.
     Generates a unique barcode if not provided.
     Creates a barcode image for the user.
-    Replaces email with phone number.
     """
     name = request.form.get("name", "")
     phone = request.form.get("phone", "")
@@ -220,7 +224,7 @@ def add_user():
     if not barcode_val:
         barcode_val = generate_unique_code()
 
-    # Save barcode in the user document and generate its image
+    # Generate barcode image
     barcode_filename = f"barcode_{barcode_val}"
     barcode_filepath = os.path.join("static", "barcodes", barcode_filename)
     create_barcode(barcode_val, barcode_filepath)
@@ -255,7 +259,6 @@ def delete_user(uid):
 def barcodes():
     """
     Displays a page with a list of all barcodes along with the corresponding user details.
-    Also provides a scanner for checking barcode ownership.
     """
     users_cursor = users_collection.find()
     users = []
