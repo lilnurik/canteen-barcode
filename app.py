@@ -4,11 +4,11 @@ import io
 import csv
 import random
 import string
-import ssl
 
 from flask import Flask, render_template, request, redirect, url_for, send_file, jsonify
 import pymongo
 from bson.objectid import ObjectId
+import certifi
 
 # For generating barcode images
 from barcode import Code128
@@ -43,12 +43,13 @@ users_collection = None
 meals_collection = None
 
 try:
-    # For testing purposes only: disable TLS certificate verification if needed.
-    # NOTE: Remove tlsAllowInvalidCertificates for production environments.
+    # Use certifi to provide a valid certificate authority.
     client = pymongo.MongoClient(
         MONGO_URI,
         tls=True,
-        tlsAllowInvalidCertificates=True
+        tlsCAFile=certifi.where(),
+        # Uncomment the following line if you need to bypass certificate validation (not recommended for production)
+        # tlsAllowInvalidCertificates=True
     )
     db = client["canteen"]
     users_collection = db["users"]
@@ -56,7 +57,7 @@ try:
     print("Successfully connected to MongoDB Atlas.")
 except Exception as e:
     print("Error connecting to MongoDB Atlas:", e)
-    # Set collections to empty dict-like objects to avoid NameError later.
+    # Fallback to empty collections to avoid NameError later.
     users_collection = {}
     meals_collection = {}
 
@@ -202,7 +203,6 @@ def download_report():
         barcode_val = user_doc.get("barcode", "")
 
         meal_time = meal["timestamp"]
-        tz = pytz.timezone("Asia/Tashkent")
         meal_time_tashkent = meal_time if meal_time.tzinfo else tz.localize(meal_time)
         meal_time_adjusted = meal_time_tashkent + datetime.timedelta(hours=5)
         meal_time_str = meal_time_adjusted.strftime("%Y-%m-%d %H:%M:%S")
@@ -293,10 +293,7 @@ def meal_records():
     for meal in meals_collection.find().sort("timestamp", -1):
         user_doc = users_collection.find_one({"_id": meal["user_id"]})
         meal["id"] = str(meal["_id"])
-        if meal["timestamp"].tzinfo:
-            meal_time = meal["timestamp"]
-        else:
-            meal_time = tz.localize(meal["timestamp"])
+        meal_time = meal["timestamp"] if meal["timestamp"].tzinfo else tz.localize(meal["timestamp"])
         meal_time_adjusted = meal_time + datetime.timedelta(hours=5)
         meal["timestamp_formatted"] = meal_time_adjusted.strftime("%Y-%m-%d %H:%M:%S")
         if user_doc:
