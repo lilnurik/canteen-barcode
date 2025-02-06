@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Список штрихкодов и проверка пользователя</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+  <style>
+    body { background-color: white; color: #003576; margin: 20px; }
+    .navbar { background-color: #003576; }
+    .navbar-brand, .nav-link, .navbar-text { color: #fff !important; }
+    .card { margin-bottom: 15px; }
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg">
+  <div class="container-fluid">
+    <span class="navbar-brand">Shtrix kod va scaner tekshiruv</span>
+    <div class="navbar-text ms-auto">
+      <a href="{{ url_for('index') }}" class="nav-link" style="color: #fff;">Ortga</a>
+    </div>
+  </div>
+</nav>
+<div class="container mt-4">
+  <h1>Shtrix kod va scaner tekshiruv</h1>
+  <form id="lookup-form" class="mb-4">
+    <div class="input-group">
+      <input type="text" class="form-control" id="lookup-barcode" name="barcode" placeholder="Shtrix kodni kiriting" required>
+      <button class="btn btn-primary" type="submit">Tekshirish</button>
+    </div>
+  </form>
+  <hr>
+  <h2>Ishchilar shtrix kodlari</h2>
+  <div class="row">
+    {% for user in users %}
+      <div class="col-md-4">
+        <div class="card border-primary">
+          <div class="card-body text-center">
+            <h5 class="card-title">{{ user.name }}</h5>
+            <!-- Show user's photo if available -->
+            {% if user.photo_url %}
+              <img src="{{ user.photo_url }}" alt="User Photo" class="img-fluid mb-2" style="max-height:150px;">
+            {% endif %}
+            <!-- Show barcode image with adjusted filename -->
+            {% if user.barcode_image %}
+              <img src="{{ url_for('static', filename='barcodes/barcode_' ~ user.barcode ~ '.png') }}" alt="Barcode" class="img-fluid">
+            {% endif %}
+            <p class="mt-2"><strong>Shtrix kod:</strong> {{ user.barcode }}</p>
+            <p><strong>Telofon raqam:</strong> {{ user.phone }}</p>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Modal for lookup result -->
+<div class="modal fade" id="lookupModal" tabindex="-1" aria-labelledby="lookupModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-primary">
+      <div class="modal-header">
+        <h5 class="modal-title" id="lookupModalLabel">Результат проверки</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <div class="modal-body" id="lookupModalBody">
+        <!-- Details will be populated here -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+document.getElementById('lookup-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const barcodeInput = document.getElementById('lookup-barcode');
+  const barcodeValue = barcodeInput.value.trim();
+  if (!barcodeValue) return;
+
+  const formData = new FormData();
+  formData.append("barcode", barcodeValue);
+
+  try {
+    const response = await fetch("{{ url_for('lookup') }}", {
+      method: "POST",
+      body: formData
+    });
+    const result = await response.json();
+
+    let content = "";
+    if(result.status === "error") {
+      content = `<p class="text-danger">${result.message}</p>`;
+    } else if (result.status === "success") {
+      const user = result.user;
+      content = `
+        <div class="text-center">
+          <h5>${user.name}</h5>
+          ${user.photo_url ? `<img src="${user.photo_url}" alt="User Photo" class="img-fluid mb-2" style="max-height:150px;">` : ""}
+          <p><strong>Номер телефона:</strong> ${user.phone}</p>
+          <p><strong>Штрихкод:</strong> ${user.barcode}</p>
+          <img src="${user.barcode_image.replace('barcodes/', 'barcodes/barcode_')}" alt="Barcode" class="img-fluid">
+        </div>
+      `;
+    }
+    document.getElementById("lookupModalBody").innerHTML = content;
+    const lookupModal = new bootstrap.Modal(document.getElementById("lookupModal"));
+    lookupModal.show();
+  } catch (error) {
+    console.error("Ошибка:", error);
+  }
+});
+</script>
+</body>
+</html>
