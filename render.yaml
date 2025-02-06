@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: canteen-kassa
+    env: python
+    runtime: python
+    pythonVersion: "3.9"
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    # Feel free to add environment variables as needed, e.g.:
+    # envVars:
+    #   - key: SOME_VARIABLE
+    #     value: SOME_VALUE
